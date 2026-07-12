@@ -29,7 +29,13 @@ Current Version:
 
 #from database.schema import initialize_database
 from database.health import check_database
-from cloud.health import check_supabase
+
+from cloud.repository import get_device
+from config import DEVICE_ID
+
+from cloud.configuration import get_configuration
+import config
+
 
 class StartupService:
 
@@ -40,20 +46,23 @@ class StartupService:
 
         print("\n========== APPLICATION STARTUP ==========\n")
 
+
         results = []
 
         results.append(("Database", self._check_database()))
         results.append(("Internet", self._check_internet()))
         results.append(("Supabase", self._check_supabase()))
-
-        # Phase 2
-        # results.append(("Device", self._validate_device()))
-        # results.append(("Subscription", self._validate_subscription()))
-        # results.append(("Configuration", self._load_configuration()))
-        # results.append(("Startup Sync", self._startup_sync()))
-        # results.append(("Camera", self._check_camera()))
-        # results.append(("QR Scanner", self._check_scanner()))
-        # results.append(("Relay", self._check_relay()))
+        results.append(("Device", self._validate_device()))
+        results.append(("Configuration", self._load_configuration()))
+        
+ 
+    #   Phase 2
+    #           
+    #       results.append(("Startup Sync", self._startup_sync()))
+    #       results.append(("Camera", self._check_camera()))
+    #       results.append(("QR Scanner", self._check_scanner()))
+    #       results.append(("Relay", self._check_relay()))
+    #
 
         failed = 0
 
@@ -63,16 +72,15 @@ class StartupService:
             print(f"{name:<20} : {'PASS' if status else 'FAIL'}")
             if not status:
                 failed += 1
-
+ 
         if failed > 0:
             print(f"\nStartup failed. {failed} service(s) failed.")
             return False
 
         print("\nStartup completed successfully.")
         return True
-    
-    
-    
+
+
     # ----------------------------------------------------
     # Individual Startup Tasks
     # ----------------------------------------------------
@@ -104,20 +112,27 @@ class StartupService:
 
         print("Checking Supabase connectivity...")
 
-        success, message = check_supabase()
+        # TODO
 
-        if success:
-            print(message)
-        else:
-            print(f"ERROR : {message}")
-
-        return success
+        return True
 
     def _validate_device(self):
 
         print("Validating device...")
 
-        # TODO
+        success, device, message = get_device(DEVICE_ID)
+
+        if not success:
+            print(f"ERROR : DEVICE_ID  {DEVICE_ID, message}")
+            return False
+
+        print("Device validated.")
+
+        print(f"Device ID      : {device['device_id']}")
+        print(f"Factory        : {device['factory_site']}")
+        print(f"Department     : {device['department']}")
+        print(f"Location       : {device['location']}")
+        print(f"Status         : {device['status']}")
 
         return True
 
@@ -131,9 +146,23 @@ class StartupService:
 
     def _load_configuration(self):
 
-        print("Loading configuration...")
+        print("Downloading application configuration...")
 
-        # TODO
+        success, configuration, message = get_configuration()
+
+        if not success:
+            print(f"ERROR : {message}")
+            return False
+
+        config.APP_CONFIG.clear()
+        config.APP_CONFIG.update(configuration)
+
+        print("Configuration downloaded.")
+
+        print(f"Configuration Version : {configuration['config_version']}")
+        print(f"Max Cycle            : {configuration['max_cycle']}")
+        print(f"Sync Interval        : {configuration['sync_interval']}")
+        print(f"Relay ON Time        : {configuration['relay_on_time']}")
 
         return True
 

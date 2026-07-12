@@ -114,3 +114,9 @@ RESULT_MAX_CYCLE_EXCEEDED = "MAX_CYCLE_EXCEEDED"
 
 APP_NAME = "QR Scanner"
 APP_VERSION = "1.0.0"
+
+####################################################
+# Runtime Configuration
+####################################################
+
+APP_CONFIG = {}

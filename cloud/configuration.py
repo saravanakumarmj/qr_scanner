@@ -1,7 +1,7 @@
 """
-repository.py
+configuration.py
 
-Cloud database operations.
+Downloads application configuration from Supabase.
 
 Author : Saravanakumar MJ
 Project : QR Scanner
@@ -10,13 +10,13 @@ Project : QR Scanner
 from cloud.connection import get_client
 
 
-def get_device(device_id):
+def get_configuration():
     """
-    Returns the device information from Supabase.
+    Downloads the active application configuration.
 
     Returns
     -------
-    (success, device, message)
+    (success, config, message)
     """
 
     try:
@@ -24,9 +24,9 @@ def get_device(device_id):
         client = get_client()
 
         response = (
-            client.table("qr_device")
+            client.table("app_configuration")
             .select("*")
-            .eq("device_id", device_id)
+            .eq("active", True)
             .limit(1)
             .execute()
         )
@@ -35,15 +35,15 @@ def get_device(device_id):
             return (
                 False,
                 None,
-                "Device is not registered."
+                "No active configuration found."
             )
 
-        device = response.data[0]
+        config = response.data[0]
 
         return (
             True,
-            device,
-            "Device validated successfully."
+            config,
+            "Configuration downloaded successfully."
         )
 
     except Exception as ex:
