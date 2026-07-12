@@ -8,15 +8,20 @@ import sqlite3
 
 from config import DB_PATH
 
+"""
+--- Add these tables later
+    "qr_invalid",
+    "qr_error_code",
+    "qr_device",
+
+"""
 
 REQUIRED_TABLES = [
     "qr_master",
     "qr_transaction",
-    "qr_invalid",
-    "qr_error_code",
-    "qr_device",
     "sync_state"
 ]
+
 
 
 def check_database():

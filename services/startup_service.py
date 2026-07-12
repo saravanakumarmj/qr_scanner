@@ -29,7 +29,7 @@ Current Version:
 
 #from database.schema import initialize_database
 from database.health import check_database
-
+from cloud.health import check_supabase
 
 class StartupService:
 
@@ -40,18 +40,20 @@ class StartupService:
 
         print("\n========== APPLICATION STARTUP ==========\n")
 
-
         results = []
 
         results.append(("Database", self._check_database()))
         results.append(("Internet", self._check_internet()))
         results.append(("Supabase", self._check_supabase()))
-        results.append(("Device", self._check_device()))
-        results.append(("Startup Sync", self._startup_sync()))
-        results.append(("Camera", self._check_camera()))
-        results.append(("QR Scanner", self._check_scanner()))
-        results.append(("Relay", self._check_relay()))
-	
+
+        # Phase 2
+        # results.append(("Device", self._validate_device()))
+        # results.append(("Subscription", self._validate_subscription()))
+        # results.append(("Configuration", self._load_configuration()))
+        # results.append(("Startup Sync", self._startup_sync()))
+        # results.append(("Camera", self._check_camera()))
+        # results.append(("QR Scanner", self._check_scanner()))
+        # results.append(("Relay", self._check_relay()))
 
         failed = 0
 
@@ -61,37 +63,16 @@ class StartupService:
             print(f"{name:<20} : {'PASS' if status else 'FAIL'}")
             if not status:
                 failed += 1
- 
+
         if failed > 0:
             print(f"\nStartup failed. {failed} service(s) failed.")
             return False
 
         print("\nStartup completed successfully.")
         return True
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        print("\nApplication startup completed successfully.\n")
-
-        return True
-
+    
+    
+    
     # ----------------------------------------------------
     # Individual Startup Tasks
     # ----------------------------------------------------
@@ -123,9 +104,14 @@ class StartupService:
 
         print("Checking Supabase connectivity...")
 
-        # TODO
+        success, message = check_supabase()
 
-        return True
+        if success:
+            print(message)
+        else:
+            print(f"ERROR : {message}")
+
+        return success
 
     def _validate_device(self):
 

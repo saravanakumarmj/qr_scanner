@@ -75,7 +75,7 @@ HEARTBEAT_INTERVAL_SECONDS = 60
 # Supabase Configuration
 # ==========================================================
 
-SUPABASE_URL = "https://fktjapjrbqphzwfndhdi.supabase.co/rest/v1/"
+SUPABASE_URL = "https://fktjapjrbqphzwfndhdi.supabase.co"
 SUPABASE_KEY = "sb_secret_Ao_Wr3H1k-kxZ7rWe5ft-w_RkKleI3e"
 
 # ==========================================================
