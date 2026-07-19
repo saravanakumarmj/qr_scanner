@@ -372,7 +372,8 @@ def _process_invalid_qr(
         "invalid_id": str(uuid.uuid4()),
         "raw_code": raw_qr,
         "device_id": scan_context["device_id"],
-        "scan_ts": scan_context["scan_timestamp"]
+        "scan_ts": scan_context["scan_timestamp"],
+        "result_code": I01_INVALID_QR
     }
 
     # -----------------------------------------------------
@@ -408,6 +409,6 @@ def _process_invalid_qr(
     return (
         True,
         False,
-        I01,
+        I01_INVALID_QR,
         "Invalid QR processed successfully."
     )

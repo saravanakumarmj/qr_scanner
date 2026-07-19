@@ -23,7 +23,7 @@ print_configuration()
 # Test Configuration
 # ---------------------------------------------------------
 
-TEST_CASE = "NORMAL"
+TEST_CASE = "INVALID"
 
 TEST_QRS = {
 
