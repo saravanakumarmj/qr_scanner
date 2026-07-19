@@ -1,4 +1,23 @@
+# Python
 venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Database
+data/*.db
+
+# Logs
+logs/
+
+# Backup files
+config.py_old
+
+# OS / IDE
+.vscode/
+.idea/venv/
 __pycache__/
 logs/
 data/*.db

@@ -54,7 +54,7 @@ CREATE TABLE qr_master
 
     updated_by          TEXT NOT NULL,
 
-    synced              INTEGER NOT NULL DEFAULT 0
+    cloud_synced        INTEGER NOT NULL DEFAULT 0
                             CHECK(synced IN (0,1))
 );
 
