@@ -10,7 +10,7 @@ Project : QR Scanner
 from cloud.connection import get_client
 
 
-def get_configuration():
+def cloud_get_configuration():
     """
     Downloads the active application configuration.
 

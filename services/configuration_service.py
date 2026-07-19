@@ -8,8 +8,8 @@ The configuration is cached in memory and
 used by the entire application.
 """
 
-from cloud.repository import cloud_get_active_configuration
-
+#from cloud.repository import cloud_get_active_configuration
+from cloud.configuration import cloud_get_configuration
 
 # ---------------------------------------------------------
 # Configuration Cache
@@ -19,6 +19,7 @@ class Configuration:
 
     # Business Rules
     max_cycle = None
+    max_age_days = None
 
     # Upload Configuration
     upload_mode = None
@@ -55,13 +56,13 @@ def load_configuration():
     message : str
     """
 
-    success, config = cloud_get_active_configuration()
+    success, config, message = cloud_get_configuration()
 
     if not success:
 
         return (
             False,
-            config
+            message
         )
 
     Configuration.max_cycle = config["max_cycle"]
@@ -81,6 +82,7 @@ def load_configuration():
     Configuration.scanner_timeout = config["scanner_timeout"]
 
     Configuration.app_version = config["app_version"]
+    Configuration.max_age_days = config["max_age_days"]
 
     return (
         True,
@@ -104,6 +106,10 @@ def print_configuration():
     print("---------------------------------------")
 
     print(f"Max Cycle              : {Configuration.max_cycle}")
+
+
+    print(f"Max Age Days           : {Configuration.max_age_days}")
+
 
     print(f"Upload Mode            : {Configuration.upload_mode}")
 

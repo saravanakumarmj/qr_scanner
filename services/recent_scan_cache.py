@@ -148,3 +148,11 @@ class RecentScanCache:
             print(f"{qr_code}   {scan_ts}")
 
         print(f"\nTotal : {self.size()} QR Codes\n")
+
+
+# --------------------------------------------------------
+# Global Cache Instance
+# --------------------------------------------------------
+
+recent_scan_cache = RecentScanCache()
+
