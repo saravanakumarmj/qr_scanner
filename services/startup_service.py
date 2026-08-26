@@ -33,8 +33,18 @@ from database.health import check_database
 from cloud.repository import get_device
 from config import DEVICE_ID
 
-from cloud.configuration import get_configuration
+from cloud.configuration import cloud_get_configuration
+
 import config
+import socket
+from cloud.repository import (
+    get_device,
+    get_subscription_for_device,
+)
+
+from services.qr_scanner import QRScanner
+
+from cloud.health import check_supabase
 
 
 class StartupService:
@@ -46,40 +56,66 @@ class StartupService:
 
         print("\n========== APPLICATION STARTUP ==========\n")
 
-
         results = []
 
-        results.append(("Database", self._check_database()))
-        results.append(("Internet", self._check_internet()))
-        results.append(("Supabase", self._check_supabase()))
-        results.append(("Device", self._validate_device()))
-        results.append(("Configuration", self._load_configuration()))
-        
- 
-    #   Phase 2
-    #           
-    #       results.append(("Startup Sync", self._startup_sync()))
-    #       results.append(("Camera", self._check_camera()))
-    #       results.append(("QR Scanner", self._check_scanner()))
-    #       results.append(("Relay", self._check_relay()))
-    #
+        results.append(
+            ("Database", self._check_database())
+        )
+
+        results.append(
+            ("Internet", self._check_internet())
+        )
+
+        results.append(
+            ("Supabase", self._check_supabase())
+        )
+
+        results.append(
+            ("Device", self._validate_device())
+        )
+
+        results.append(
+            ("Subscription", self._validate_subscription())
+        )
+
+        results.append(
+            ("Configuration", self._load_configuration())
+        )
+
+        results.append(
+            ("Startup Sync", self._startup_sync())
+        )
+
+        results.append(
+            ("QR Scanner", self._check_scanner())
+        )
 
         failed = 0
 
         print("\n========== STARTUP SUMMARY ==========\n")
 
         for name, status in results:
-            print(f"{name:<20} : {'PASS' if status else 'FAIL'}")
+
+            print(
+                f"{name:<20} : "
+                f"{'PASS' if status else 'FAIL'}"
+            )
+
             if not status:
                 failed += 1
- 
+
         if failed > 0:
-            print(f"\nStartup failed. {failed} service(s) failed.")
+
+            print(
+                f"\nStartup failed. "
+                f"{failed} service(s) failed."
+            )
+
             return False
 
-        print("\nStartup completed successfully.")
-        return True
+        print("\nAPPLICATION READY")
 
+        return True
 
     # ----------------------------------------------------
     # Individual Startup Tasks
@@ -104,17 +140,32 @@ class StartupService:
 
         print("Checking internet connectivity...")
 
-        # TODO
+        try:
+            socket.create_connection(
+                ("8.8.8.8", 53),
+                timeout=3
+            )
 
-        return True
+            print("Internet OK")
+            return True
+
+        except OSError as ex:
+
+            print(f"Internet unavailable: {ex}")
+            return False
 
     def _check_supabase(self):
 
         print("Checking Supabase connectivity...")
 
-        # TODO
+        success, message = check_supabase()
 
-        return True
+        if success:
+            print("Supabase OK")
+            return True
+
+        print(f"Supabase unavailable: {message}")
+        return False
 
     def _validate_device(self):
 
@@ -140,7 +191,45 @@ class StartupService:
 
         print("Validating subscription...")
 
-        # TODO
+        success, subscription, message = (
+            get_subscription_for_device(DEVICE_ID)
+        )
+
+        if not success:
+
+            print(f"ERROR : {message}")
+
+            return False
+
+        print(
+            f"Subscription ID     : "
+            f"{subscription['subscription_id']}"
+        )
+
+        print(
+            f"Subscription Status : "
+            f"{subscription['status']}"
+        )
+
+        print(
+            f"Start Date          : "
+            f"{subscription['start_date']}"
+        )
+
+        print(
+            f"Expiry Date         : "
+            f"{subscription['expiry_date']}"
+        )
+
+        if not subscription["valid"]:
+
+            print(
+                f"ERROR : {subscription['message']}"
+            )
+
+            return False
+
+        print("Subscription valid.")
 
         return True
 
@@ -148,7 +237,7 @@ class StartupService:
 
         print("Downloading application configuration...")
 
-        success, configuration, message = get_configuration()
+        success, configuration, message = cloud_get_configuration()
 
         if not success:
             print(f"ERROR : {message}")
@@ -170,9 +259,10 @@ class StartupService:
 
         print("Synchronizing master data...")
 
-        # TODO
+        print("Startup sync not implemented yet.")
 
-        return True
+        return False
+
 
     def _check_camera(self):
 
@@ -186,9 +276,15 @@ class StartupService:
 
         print("Checking QR scanner...")
 
-        # TODO
+        success, message = QRScanner.check_health()
 
-        return True
+        if success:
+            print("QR scanner OK")
+            return True
+
+        print(f"QR scanner unavailable: {message}")
+        return False
+
 
     def _check_relay(self):
 

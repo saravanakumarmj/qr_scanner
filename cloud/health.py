@@ -10,6 +10,7 @@ Project : QR Scanner
 from cloud.connection import get_client
 
 
+
 def check_supabase():
     """
     Verifies Supabase connectivity.
@@ -40,3 +41,5 @@ def check_supabase():
             False,
             str(ex)
         )
+
+ 

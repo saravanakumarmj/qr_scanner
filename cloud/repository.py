@@ -64,6 +64,155 @@ def get_device(device_id):
         )
 
 
+# --------------------------------------------------------
+# Subscription Validation
+# --------------------------------------------------------
+
+def get_subscription_for_device(device_id):
+    """
+    Get and validate the subscription assigned to a device.
+
+    The subscription is stored only in Supabase and is the
+    source of truth for device authorization.
+
+    Returns
+    -------
+    (success, subscription, message)
+    """
+
+    try:
+
+        client = get_client()
+
+        # ------------------------------------------------
+        # Get device
+        # ------------------------------------------------
+
+        response = (
+            client.table("qr_device")
+            .select("device_id, subscription_id")
+            .eq("device_id", device_id)
+            .limit(1)
+            .execute()
+        )
+
+        if len(response.data) == 0:
+
+            return (
+                False,
+                None,
+                "Device is not registered."
+            )
+
+        device = response.data[0]
+
+        subscription_id = device.get("subscription_id")
+
+        if not subscription_id:
+
+            return (
+                False,
+                None,
+                "Device has no subscription assigned."
+            )
+
+        # ------------------------------------------------
+        # Get subscription
+        # ------------------------------------------------
+
+        response = (
+            client.table("qr_subscription")
+            .select("*")
+            .eq("subscription_id", subscription_id)
+            .limit(1)
+            .execute()
+        )
+
+        if len(response.data) == 0:
+
+            return (
+                False,
+                None,
+                f"Subscription {subscription_id} not found."
+            )
+
+        subscription = response.data[0]
+
+        # ------------------------------------------------
+        # Validate subscription
+        # ------------------------------------------------
+
+        from datetime import date
+
+        today = date.today()
+
+        status = subscription.get("status")
+        start_date = subscription.get("start_date")
+        expiry_date = subscription.get("expiry_date")
+
+        if status != "ACTIVE":
+
+            subscription["valid"] = False
+            subscription["message"] = (
+                f"Subscription {subscription_id} is {status}."
+            )
+
+            return (
+                True,
+                subscription,
+                subscription["message"]
+            )
+
+        if start_date and today.isoformat() < start_date:
+
+            subscription["valid"] = False
+            subscription["message"] = (
+                f"Subscription {subscription_id} "
+                f"is not active yet."
+            )
+
+            return (
+                True,
+                subscription,
+                subscription["message"]
+            )
+
+        if expiry_date and today.isoformat() > expiry_date:
+
+            subscription["valid"] = False
+            subscription["message"] = (
+                f"Subscription {subscription_id} "
+                f"has expired."
+            )
+
+            return (
+                True,
+                subscription,
+                subscription["message"]
+            )
+
+        # ------------------------------------------------
+        # Valid
+        # ------------------------------------------------
+
+        subscription["valid"] = True
+        subscription["message"] = (
+            "Subscription is valid."
+        )
+
+        return (
+            True,
+            subscription,
+            "Subscription validated successfully."
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            None,
+            str(ex)
+        )
 
 # --------------------------------------------------------
 # Lookup QR
