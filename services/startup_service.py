@@ -35,6 +35,18 @@ from config import DEVICE_ID
 
 from cloud.configuration import cloud_get_configuration
 
+from services.configuration_service import (
+    load_configuration,
+    print_configuration
+)
+
+
+from services.upload_service import UploadService
+from services.refresh_local_service import RefreshLocalService
+
+from utils.datetime_utils import current_timestamp
+
+
 import config
 import socket
 from cloud.repository import (
@@ -237,33 +249,78 @@ class StartupService:
 
         print("Downloading application configuration...")
 
-        success, configuration, message = cloud_get_configuration()
+        success, message = load_configuration()
 
         if not success:
-            print(f"ERROR : {message}")
-            return False
+            print(
+                f"[STARTUP] Configuration load failed: {message}"
+            )
+            raise RuntimeError(message)
 
-        config.APP_CONFIG.clear()
-        config.APP_CONFIG.update(configuration)
-
-        print("Configuration downloaded.")
-
-        print(f"Configuration Version : {configuration['config_version']}")
-        print(f"Max Cycle            : {configuration['max_cycle']}")
-        print(f"Sync Interval        : {configuration['sync_interval']}")
-        print(f"Relay ON Time        : {configuration['relay_on_time']}")
+        print_configuration()
 
         return True
 
     def _startup_sync(self):
 
-        print("Synchronizing master data...")
+        print("Synchronizing local data...")
 
-        print("Startup sync not implemented yet.")
+        # -------------------------------------------------
+        # Capture ONE timestamp for this startup sync cycle
+        # -------------------------------------------------
 
-        return False
+        sync_timestamp = current_timestamp()
 
+        print(
+            f"Sync Timestamp : {sync_timestamp}"
+        )
 
+        # -------------------------------------------------
+        # Upload pending local records
+        # -------------------------------------------------
+
+        print("Uploading pending local records...")
+
+        success, message = UploadService().run(
+            sync_timestamp
+        )
+
+        if not success:
+
+            print(
+                f"ERROR : Startup upload failed: {message}"
+            )
+
+            return False
+
+        print(
+            f"Upload successful: {message}"
+        )
+
+        # -------------------------------------------------
+        # Full refresh of local SQLite
+        # -------------------------------------------------
+
+        print("Refreshing local SQLite database...")
+
+        success, message = RefreshLocalService().run()
+
+        if not success:
+
+            print(
+                f"ERROR : Local refresh failed: {message}"
+            )
+
+            return False
+
+        print(
+            f"Local refresh successful: {message}"
+        )
+
+        return True
+        
+        
+        
     def _check_camera(self):
 
         print("Checking camera...")

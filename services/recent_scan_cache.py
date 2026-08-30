@@ -71,6 +71,24 @@ class RecentScanCache:
         return qr_code in self._cache
 
     # --------------------------------------------------------
+    # Get Timestamp
+    # --------------------------------------------------------
+
+    def get_timestamp(self, qr_code):
+        """
+        Returns the last scanned timestamp stored in cache.
+
+        Returns
+        -------
+        datetime | str | None
+            Timestamp from the cache, or None if QR is not
+            present in the cache.
+        """
+
+        return self._cache.get(qr_code)
+
+
+    # --------------------------------------------------------
     # Add
     # --------------------------------------------------------
 

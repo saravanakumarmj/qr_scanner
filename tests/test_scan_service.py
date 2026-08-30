@@ -23,11 +23,11 @@ print_configuration()
 # Test Configuration
 # ---------------------------------------------------------
 
-TEST_CASE = "INVALID"
+TEST_CASE = "NORMAL"
 
 TEST_QRS = {
 
-    "NORMAL": "250217S0002",
+    "NORMAL": "174THPF",
 
     "INVALID": "INVALID_QR_12345",
 
@@ -43,9 +43,12 @@ print("\n----------------------------------------")
 print(f"Test Case : {TEST_CASE}")
 print("----------------------------------------")
 
-success, relay, result_code, message = process_scan(raw_qr)
+print(process_scan(raw_qr))
 
-print(f"Success     : {success}")
-print(f"Relay       : {relay}")
-print(f"Result Code : {result_code}")
-print(f"Message     : {message}")
+
+#success, relay, result_code, message = process_scan(raw_qr)
+
+#print(f"Success     : {success}")
+#print(f"Relay       : {relay}")
+#print(f"Result Code : {result_code}")
+#print(f"Message     : {message}")

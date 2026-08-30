@@ -6,6 +6,8 @@ Core business logic for processing QR scans.
 import uuid
 
 from config import DEVICE_ID
+from utils.base36 import decode_base36
+
 
 from utils.datetime_utils import (
     current_timestamp,
@@ -27,7 +29,8 @@ from services.result_codes import (
     F01_CYCLE_LIMIT,
     F02_AGE_LIMIT,
     I01_INVALID_QR,
-    E03_DATABASE_ERROR
+    E03_DATABASE_ERROR,
+    I04_DUPLICATE_QR_SCAN
 )
 # ---------------------------------------------------------
 # Process Scan
@@ -49,6 +52,7 @@ def process_scan(raw_qr):
     message : str
     """
 
+
     # -----------------------------------------------------
     # Ignore Empty Scan
     # -----------------------------------------------------
@@ -63,16 +67,29 @@ def process_scan(raw_qr):
         )
 
     # -----------------------------------------------------
+    # Encode the qr to numeric and use it. When the converted is not numeric use the original code itself
+    # -----------------------------------------------------
+   
+    decoded_qr = decode_base36(raw_qr)
+
+    if  decoded_qr.isdigit():
+        raw_qr = decoded_qr
+    
+
+    # -----------------------------------------------------
     # Duplicate Check
     # -----------------------------------------------------
 
     if recent_scan_cache.exists(raw_qr):
 
+        last_scan_ts = recent_scan_cache.get_timestamp(raw_qr)
+
         return (
             True,
             False,
-            S01,
-            "Duplicate scan ignored."
+            I04_DUPLICATE_QR_SCAN,
+            f"Duplicate Scan : Ignored "
+            f"[{raw_qr}] [{last_scan_ts}]"
         )
 
     # -----------------------------------------------------
@@ -189,7 +206,7 @@ def _process_valid_qr(
     result_code : str
     message : str
     """
-    print('data -->',qr)
+    #print('data -->',qr)
     relay = False
 
     result_code = S00_SUCCESS
@@ -199,6 +216,16 @@ def _process_valid_qr(
     # -----------------------------------------------------
 
     qr["cycle_count"] += 1
+    
+    """
+    print(
+    "DEBUG:",
+    "cycle_count=", qr["cycle_count"],
+    "max_cycle=", Configuration.max_cycle,
+    "age=", age_in_days(qr["qr_printed_ts"]),
+    "max_age_days=", Configuration.max_age_days)
+    """
+    
 
     # -----------------------------------------------------
     # Check Cycle Limit

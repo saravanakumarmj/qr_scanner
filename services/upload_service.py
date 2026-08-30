@@ -5,10 +5,17 @@ Uploads local SQLite changes to Supabase.
 
 Upload Sequence
 ---------------
-1. Upload qr_transaction
-2. Update qr_master
-3. Upload qr_invalid
-4. Mark local records as synced
+1. Capture sync_timestamp
+2. Upload pending qr_transaction records up to sync_timestamp
+3. Upload modified qr_master records up to sync_timestamp
+4. Upload pending qr_invalid records up to sync_timestamp
+5. Mark all successfully uploaded local records as synced
+   using the same sync_timestamp
+
+Important
+---------
+Records created/modified after sync_timestamp are NOT included
+in this upload cycle. They remain pending for the next cycle.
 """
 
 from database.repository import (
@@ -16,6 +23,7 @@ from database.repository import (
     local_get_pending_invalid,
     local_get_modified_qr_master,
     local_mark_transactions_synced,
+    local_mark_qr_master_synced,
     local_mark_invalid_synced
 )
 
@@ -36,39 +44,65 @@ class UploadService:
 
         self.modified_qr = []
 
-        self.transaction_ids = []
-
-        self.invalid_ids = []
-
     # ---------------------------------------------------------
     # Main Upload Process
     # ---------------------------------------------------------
 
-    def run(self):
+    def run(self, sync_timestamp):
         """
-        Executes one upload cycle.
+        Executes one complete upload cycle.
+
+        Parameters
+        ----------
+        sync_timestamp : str
+            Timestamp defining the boundary of this upload cycle.
+
+        Returns
+        -------
+        success : bool
+        message : str
         """
 
-        # Upload transactions
-        success, message = self.upload_transactions()
+        # -----------------------------------------------------
+        # 1. Upload Transactions
+        # -----------------------------------------------------
+
+        success, message = self.upload_transactions(
+            sync_timestamp
+        )
 
         if not success:
-            return success, message
+            return False, message
 
-        # Update qr_master
-        success, message = self.upload_qr_master()
+        # -----------------------------------------------------
+        # 2. Upload QR Master
+        # -----------------------------------------------------
+
+        success, message = self.upload_qr_master(
+            sync_timestamp
+        )
 
         if not success:
-            return success, message
+            return False, message
 
-        # Upload invalid QR
-        success, message = self.upload_invalid()
+        # -----------------------------------------------------
+        # 3. Upload Invalid QR
+        # -----------------------------------------------------
+
+        success, message = self.upload_invalid(
+            sync_timestamp
+        )
 
         if not success:
-            return success, message
+            return False, message
 
-        # Mark local records as synced
-        success, message = self.complete_upload()
+        # -----------------------------------------------------
+        # 4. Mark Local Records as Synced
+        # -----------------------------------------------------
+
+        success, message = self.complete_upload(
+            sync_timestamp
+        )
 
         return success, message
 
@@ -76,24 +110,32 @@ class UploadService:
     # Upload Transactions
     # ---------------------------------------------------------
 
-    def upload_transactions(self):
+    def upload_transactions(self, sync_timestamp):
+        """
+        Upload pending qr_transaction records whose scan timestamp
+        is at or before the synchronization timestamp.
+        """
 
-        success, transactions = local_get_pending_transactions()
+        success, transactions = local_get_pending_transactions(
+            sync_timestamp
+        )
 
         if not success:
             return False, transactions
 
-        if len(transactions) == 0:
-            return True, "No pending transactions."
-
         self.pending_transactions = transactions
 
-        self.transaction_ids = [
-            row["transaction_id"]
-            for row in transactions
-        ]
+        if not transactions:
 
-        # Upload transaction records
+            return (
+                True,
+                "No pending transactions."
+            )
+
+        # -----------------------------------------------------
+        # Upload to Supabase
+        # -----------------------------------------------------
+
         success, message = cloud_insert_transactions(
             transactions
         )
@@ -101,15 +143,25 @@ class UploadService:
         if not success:
             return False, message
 
-        # Earliest scan timestamp
-        earliest_scan_ts = min(
-            row["scan_ts"]
-            for row in transactions
+        return (
+            True,
+            message
         )
 
-        # Read modified qr_master records
+    # ---------------------------------------------------------
+    # Upload QR Master
+    # ---------------------------------------------------------
+
+    def upload_qr_master(self, sync_timestamp):
+        """
+        Upload qr_master records that were modified locally
+        up to the synchronization timestamp.
+
+        qr_code_encoded is intentionally not uploaded.
+        """
+
         success, qr_records = local_get_modified_qr_master(
-            earliest_scan_ts
+            sync_timestamp
         )
 
         if not success:
@@ -117,79 +169,121 @@ class UploadService:
 
         self.modified_qr = qr_records
 
-        return True, message
-
-    # ---------------------------------------------------------
-    # Upload QR Master
-    # ---------------------------------------------------------
-
-    def upload_qr_master(self):
-
-        if len(self.modified_qr) == 0:
+        if not qr_records:
 
             return (
                 True,
                 "No qr_master updates."
             )
 
-        return cloud_update_qr_master(
-            self.modified_qr
+        # -----------------------------------------------------
+        # Upload to Supabase
+        # -----------------------------------------------------
+
+        success, message = cloud_update_qr_master(
+            qr_records
+        )
+
+        if not success:
+            return False, message
+
+        return (
+            True,
+            message
         )
 
     # ---------------------------------------------------------
     # Upload Invalid QR
     # ---------------------------------------------------------
 
-    def upload_invalid(self):
+    def upload_invalid(self, sync_timestamp):
+        """
+        Upload pending invalid QR records whose scan timestamp
+        is at or before the synchronization timestamp.
+        """
 
-        success, invalid = local_get_pending_invalid()
+        success, invalid = local_get_pending_invalid(
+            sync_timestamp
+        )
 
         if not success:
             return False, invalid
 
-        if len(invalid) == 0:
+        self.pending_invalid = invalid
+
+        if not invalid:
 
             return (
                 True,
-                "No invalid QR records."
+                "No pending invalid QR records."
             )
 
-        self.pending_invalid = invalid
+        # -----------------------------------------------------
+        # Upload to Supabase
+        # -----------------------------------------------------
 
-        self.invalid_ids = [
-            row["invalid_id"]
-            for row in invalid
-        ]
-
-        return cloud_insert_invalid_qr(
+        success, message = cloud_insert_invalid_qr(
             invalid
+        )
+
+        if not success:
+            return False, message
+
+        return (
+            True,
+            message
         )
 
     # ---------------------------------------------------------
     # Complete Upload
     # ---------------------------------------------------------
 
-    def complete_upload(self):
+    def complete_upload(self, sync_timestamp):
+        """
+        Marks all records belonging to this synchronization
+        window as successfully synchronized.
 
-        # Mark uploaded transactions as synced
-        if self.transaction_ids:
+        The same sync_timestamp used for selecting records is
+        used here to prevent records created during the upload
+        from being marked as synced.
+        """
 
-            success, message = local_mark_transactions_synced(
-                self.transaction_ids
-            )
+        # -----------------------------------------------------
+        # Mark Transactions
+        # -----------------------------------------------------
 
-            if not success:
-                return success, message
+        success, message = local_mark_transactions_synced(
+            sync_timestamp
+        )
 
-        # Mark uploaded invalid records as synced
-        if self.invalid_ids:
+        if not success:
+            return False, message
 
-            success, message = local_mark_invalid_synced(
-                self.invalid_ids
-            )
+        # -----------------------------------------------------
+        # Mark QR Master
+        # -----------------------------------------------------
 
-            if not success:
-                return success, message
+        success, message = local_mark_qr_master_synced(
+            sync_timestamp
+        )
+
+        if not success:
+            return False, message
+
+        # -----------------------------------------------------
+        # Mark Invalid QR
+        # -----------------------------------------------------
+
+        success, message = local_mark_invalid_synced(
+            sync_timestamp
+        )
+
+        if not success:
+            return False, message
+
+        # -----------------------------------------------------
+        # Completed
+        # -----------------------------------------------------
 
         return (
             True,

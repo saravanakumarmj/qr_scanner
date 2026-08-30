@@ -39,10 +39,10 @@ def parse_timestamp(timestamp):
 # ---------------------------------------------------------
 
 def age_in_days(timestamp):
-    """
-    Returns age in days from the given timestamp.
-    """
 
-    timestamp = parse_timestamp(timestamp)
+    if isinstance(timestamp, str):
+        timestamp = datetime.fromisoformat(timestamp)
 
-    return (datetime.now() - timestamp).days
+    return (
+        datetime.now(timestamp.tzinfo) - timestamp
+    ).days

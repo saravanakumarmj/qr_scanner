@@ -281,19 +281,11 @@ def cloud_connect():
 
     return _supabase
 
-
 def cloud_insert_transactions(transactions):
     """
     Bulk insert qr_transaction records into Supabase.
 
-    Parameters
-    ----------
-    transactions : list[dict]
-
-    Returns
-    -------
-    success : bool
-    message : str
+    The local-only 'synced' column is intentionally excluded.
     """
 
     try:
@@ -307,15 +299,36 @@ def cloud_insert_transactions(transactions):
 
         supabase = cloud_connect()
 
+        payload = []
+
+        for record in transactions:
+
+            payload.append(
+                {
+                    "transaction_id": record["transaction_id"],
+                    "qr_code": record["qr_code"],
+                    "device_id": record["device_id"],
+                    "scan_ts": record["scan_ts"],
+                    "cycle_count": record["cycle_count"],
+                    "scan_result": record["scan_result"],
+                    "event_reason": (
+                        record.get("event_reason")
+                        if record.get("event_reason") != "NORMAL_SCAN"
+                        else None
+                    ),
+                    "result_code": record["result_code"]
+                }
+            )
+
         supabase.table(
             "qr_transaction"
-        ).insert(
-            transactions
+        ).upsert(
+            payload
         ).execute()
 
         return (
             True,
-            f"{len(transactions)} transaction(s) uploaded."
+            f"{len(payload)} transaction(s) uploaded."
         )
 
     except Exception as ex:
@@ -325,14 +338,11 @@ def cloud_insert_transactions(transactions):
             str(ex)
         )
 
-
 def cloud_insert_invalid_qr(invalid_records):
     """
-    Bulk insert qr_invalid records.
+    Bulk insert qr_invalid records into Supabase.
 
-    Parameters
-    ----------
-    invalid_records : list[dict]
+    The local-only 'synced' column is intentionally excluded.
     """
 
     try:
@@ -341,7 +351,7 @@ def cloud_insert_invalid_qr(invalid_records):
 
             return (
                 True,
-                "No invalid QR records."
+                "No invalid QR records to upload."
             )
 
         supabase = cloud_connect()
@@ -365,9 +375,10 @@ def cloud_insert_invalid_qr(invalid_records):
         ).upsert(
             payload
         ).execute()
+
         return (
             True,
-            f"{len(invalid_records)} invalid QR(s) uploaded."
+            f"{len(payload)} invalid QR record(s) uploaded."
         )
 
     except Exception as ex:
@@ -378,20 +389,13 @@ def cloud_insert_invalid_qr(invalid_records):
         )
 
 
-
-
 def cloud_update_qr_master(qr_records):
     """
     Bulk update qr_master records in Supabase.
 
-    Parameters
-    ----------
-    qr_records : list[dict]
-
-    Returns
-    -------
-    success : bool
-    message : str
+    Local-only synchronization fields are intentionally excluded:
+        - cloud_synced
+        - qr_code_encoded
     """
 
     try:
@@ -410,7 +414,6 @@ def cloud_update_qr_master(qr_records):
         for qr in qr_records:
 
             payload.append(
-
                 {
                     "qr_code": qr["qr_code"],
                     "cycle_count": qr["cycle_count"],
@@ -429,7 +432,6 @@ def cloud_update_qr_master(qr_records):
                     "updated_ts": qr["updated_ts"],
                     "updated_by": qr["updated_by"]
                 }
-
             )
 
         supabase.table(
@@ -449,3 +451,42 @@ def cloud_update_qr_master(qr_records):
             False,
             str(ex)
         )
+
+# ---------------------------------------------------------
+# Get Complete QR Master
+# ---------------------------------------------------------
+
+def cloud_get_all_qr_master():
+    """
+    Fetch the complete qr_master table from Supabase.
+
+    Returns
+    -------
+    success : bool
+    data : list[dict] | str
+    """
+
+    try:
+
+        supabase = cloud_connect()
+
+        response = (
+            supabase
+            .table("qr_master")
+            .select("*")
+            .order("qr_code")
+            .execute()
+        )
+
+        return (
+            True,
+            response.data
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            str(ex)
+        )
+

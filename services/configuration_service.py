@@ -65,24 +65,23 @@ def load_configuration():
             message
         )
 
+# Config data for flagging
     Configuration.max_cycle = config["max_cycle"]
+    Configuration.max_age_days = config["max_age_days"]
 
+# Config data for local -> cloud sync
     Configuration.upload_mode = config["upload_mode"]
-
     Configuration.upload_interval_secs = config["upload_interval_secs"]
-
     Configuration.upload_batch_size = config["upload_batch_size"]
 
+
     Configuration.sync_interval = config["sync_interval"]
-
     Configuration.relay_on_time = config["relay_on_time"]
-
     Configuration.heartbeat_interval = config["heartbeat_interval"]
-
     Configuration.scanner_timeout = config["scanner_timeout"]
 
     Configuration.app_version = config["app_version"]
-    Configuration.max_age_days = config["max_age_days"]
+
 
     return (
         True,

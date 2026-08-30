@@ -146,10 +146,12 @@ def local_insert_transaction(transaction):
     success : bool
     message : str
     """
+    #print(" !! Ins Transactrion data",transaction)
 
     try:
 
         conn = get_connection()
+        
 
         cursor = conn.cursor()
 
@@ -192,7 +194,7 @@ def local_insert_transaction(transaction):
 
         return (
             False,
-            str(ex)
+            "Insert Transaction table : " + str(ex)
         )        
         
         
@@ -252,42 +254,38 @@ def local_insert_invalid_qr(invalid_qr):
             str(ex)
         )
 
-
 # ---------------------------------------------------------
 # Upload Functions
 # ---------------------------------------------------------
 
-def local_get_pending_transactions():
+def local_get_pending_transactions(sync_timestamp):
     """
-    Returns all pending transaction records that have not yet
-    been uploaded to Supabase.
+    Returns pending transaction records that were scanned
+    at or before sync_timestamp.
 
-    Returns
-    -------
-    success : bool
-    data    : list[dict] | str
+    Records created after sync_timestamp are left for the
+    next synchronization cycle.
     """
 
     try:
 
-        # Create database connection
         conn = get_connection()
 
         cursor = conn.cursor()
 
-        # Read pending transactions
         cursor.execute(
             """
             SELECT *
             FROM qr_transaction
             WHERE synced = 0
+              AND scan_ts <= ?
             ORDER BY scan_ts
-            """
+            """,
+            (sync_timestamp,)
         )
 
         rows = cursor.fetchall()
 
-        # Convert sqlite.Row objects to dictionaries
         return (
             True,
             [dict(row) for row in rows]
@@ -302,89 +300,37 @@ def local_get_pending_transactions():
 
 
 # ---------------------------------------------------------
+# Get Pending Invalid QR
+# ---------------------------------------------------------
 
-def local_get_pending_invalid():
+def local_get_pending_invalid(sync_timestamp):
     """
-    Returns all invalid QR records that have not yet been
-    uploaded to Supabase.
+    Returns pending invalid QR records that were scanned
+    at or before sync_timestamp.
 
-    Returns
-    -------
-    success : bool
-    data    : list[dict] | str
+    Records created after sync_timestamp are left for the
+    next synchronization cycle.
     """
 
     try:
 
-        # Create database connection
         conn = get_connection()
 
         cursor = conn.cursor()
 
-        # Read pending invalid QR records
         cursor.execute(
             """
             SELECT *
             FROM qr_invalid
             WHERE synced = 0
+              AND scan_ts <= ?
             ORDER BY scan_ts
-            """
-        )
-
-        rows = cursor.fetchall()
-
-        # Convert sqlite.Row objects to dictionaries
-        return (
-            True,
-            [dict(row) for row in rows]
-        )
-
-    except Exception as ex:
-
-        return (
-            False,
-            str(ex)
-        )
-
-
-# ---------------------------------------------------------
-
-def local_get_modified_qr_master(earliest_scan_ts):
-    """
-    Returns all qr_master records modified on or after the
-    earliest pending transaction timestamp.
-
-    Parameters
-    ----------
-    earliest_scan_ts : str
-
-    Returns
-    -------
-    success : bool
-    data    : list[dict] | str
-    """
-
-    try:
-
-        # Create database connection
-        conn = get_connection()
-
-        cursor = conn.cursor()
-
-        # Read only modified QR records
-        cursor.execute(
-            """
-            SELECT *
-            FROM qr_master
-            WHERE last_scan >= ?
-            ORDER BY last_scan
             """,
-            (earliest_scan_ts,)
+            (sync_timestamp,)
         )
 
         rows = cursor.fetchall()
 
-        # Convert sqlite.Row objects to dictionaries
         return (
             True,
             [dict(row) for row in rows]
@@ -399,48 +345,95 @@ def local_get_modified_qr_master(earliest_scan_ts):
 
 
 # ---------------------------------------------------------
+# Get Modified QR Master
+# ---------------------------------------------------------
 
-def local_mark_transactions_synced(transaction_ids):
+def local_get_modified_qr_master(sync_timestamp):
     """
-    Marks uploaded transaction records as synced.
+    Returns qr_master records that have local changes
+    pending for cloud synchronization.
 
-    Parameters
-    ----------
-    transaction_ids : list[str]
+    Only records modified at or before sync_timestamp
+    are included.
 
-    Returns
-    -------
-    success : bool
-    message : str
+    qr_code_encoded is removed before returning the records
+    because it is a local-only field.
     """
 
     try:
-
-        # Nothing to update
-        if not transaction_ids:
-
-            return (
-                True,
-                "No transactions to update."
-            )
 
         conn = get_connection()
 
         cursor = conn.cursor()
 
-        # Build placeholders dynamically
-        placeholders = ",".join(
-            ["?"] * len(transaction_ids)
+        cursor.execute(
+            """
+            SELECT
+                qr_code,
+                cycle_count,
+                qr_printed_ts,
+                flagged,
+                flag_reason,
+                flag_mode,
+                flag_device_id,
+                flagged_ts,
+                active_status,
+                discard_user,
+                discard_device_id,
+                discard_reason,
+                discard_ts,
+                created_ts,
+                updated_ts,
+                updated_by
+            FROM qr_master
+            WHERE cloud_synced = 0
+              AND updated_ts <= ?
+            ORDER BY updated_ts
+            """,
+            (sync_timestamp,)
         )
 
-        # Mark transactions as synced
+        rows = cursor.fetchall()
+
+        return (
+            True,
+            [dict(row) for row in rows]
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            str(ex)
+        )
+
+
+# ---------------------------------------------------------
+# Mark Transactions Synced
+# ---------------------------------------------------------
+
+def local_mark_transactions_synced(sync_timestamp):
+    """
+    Marks all transaction records scanned at or before
+    sync_timestamp as synced.
+
+    Records created after sync_timestamp remain pending.
+    """
+
+    try:
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
         cursor.execute(
-            f"""
+            """
             UPDATE qr_transaction
             SET synced = 1
-            WHERE transaction_id IN ({placeholders})
+            WHERE synced = 0
+              AND scan_ts <= ?
             """,
-            transaction_ids
+            (sync_timestamp,)
         )
 
         conn.commit()
@@ -459,48 +452,74 @@ def local_mark_transactions_synced(transaction_ids):
 
 
 # ---------------------------------------------------------
+# Mark QR Master Synced
+# ---------------------------------------------------------
 
-def local_mark_invalid_synced(invalid_ids):
+def local_mark_qr_master_synced(sync_timestamp):
     """
-    Marks uploaded invalid QR records as synced.
+    Marks all qr_master records modified at or before
+    sync_timestamp as synced.
 
-    Parameters
-    ----------
-    invalid_ids : list[str]
-
-    Returns
-    -------
-    success : bool
-    message : str
+    Records modified after sync_timestamp remain pending.
     """
 
     try:
-
-        # Nothing to update
-        if not invalid_ids:
-
-            return (
-                True,
-                "No invalid QR records to update."
-            )
 
         conn = get_connection()
 
         cursor = conn.cursor()
 
-        # Build placeholders dynamically
-        placeholders = ",".join(
-            ["?"] * len(invalid_ids)
+        cursor.execute(
+            """
+            UPDATE qr_master
+            SET cloud_synced = 1
+            WHERE cloud_synced = 0
+              AND updated_ts <= ?
+            """,
+            (sync_timestamp,)
         )
 
-        # Mark invalid QR records as synced
+        conn.commit()
+
+        return (
+            True,
+            f"{cursor.rowcount} qr_master record(s) marked as synced."
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            str(ex)
+        )
+
+
+# ---------------------------------------------------------
+# Mark Invalid QR Synced
+# ---------------------------------------------------------
+
+def local_mark_invalid_synced(sync_timestamp):
+    """
+    Marks all invalid QR records scanned at or before
+    sync_timestamp as synced.
+
+    Records created after sync_timestamp remain pending.
+    """
+
+    try:
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
         cursor.execute(
-            f"""
+            """
             UPDATE qr_invalid
             SET synced = 1
-            WHERE invalid_id IN ({placeholders})
+            WHERE synced = 0
+              AND scan_ts <= ?
             """,
-            invalid_ids
+            (sync_timestamp,)
         )
 
         conn.commit()
@@ -508,6 +527,302 @@ def local_mark_invalid_synced(invalid_ids):
         return (
             True,
             f"{cursor.rowcount} invalid QR record(s) marked as synced."
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            str(ex)
+        )
+
+# ---------------------------------------------------------
+# Full Local Refresh
+# ---------------------------------------------------------
+
+def local_full_refresh_qr_master(qr_records):
+    """
+    Completely refresh the local SQLite database from
+    the cloud qr_master table.
+
+    Refresh behavior
+    ----------------
+    1. Delete all local qr_transaction records.
+    2. Delete all local qr_invalid records.
+    3. Delete all local qr_master records.
+    4. Bulk insert the complete cloud qr_master dataset.
+    5. Mark all refreshed qr_master records as cloud_synced = 1.
+
+    The entire operation is performed inside one SQLite
+    transaction. If anything fails, the complete operation
+    is rolled back.
+
+    Parameters
+    ----------
+    qr_records : list[dict]
+        Complete qr_master dataset retrieved from Supabase.
+
+    Returns
+    -------
+    success : bool
+    message : str
+    """
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        # -------------------------------------------------
+        # Start transaction
+        # -------------------------------------------------
+
+        conn.execute("BEGIN")
+
+        # -------------------------------------------------
+        # Wipe local transaction history
+        # -------------------------------------------------
+
+        cursor.execute(
+            """
+            DELETE FROM qr_transaction
+            """
+        )
+
+        transaction_count = cursor.rowcount
+
+        # -------------------------------------------------
+        # Wipe local invalid QR history
+        # -------------------------------------------------
+
+        cursor.execute(
+            """
+            DELETE FROM qr_invalid
+            """
+        )
+
+        invalid_count = cursor.rowcount
+
+        # -------------------------------------------------
+        # Wipe local QR master
+        # -------------------------------------------------
+
+        cursor.execute(
+            """
+            DELETE FROM qr_master
+            """
+        )
+
+        master_deleted_count = cursor.rowcount
+
+        # -------------------------------------------------
+        # Prepare bulk QR master records
+        # -------------------------------------------------
+
+        values = []
+
+        for qr in qr_records:
+
+            values.append(
+                (
+                    qr["qr_code"],
+                    qr.get("cycle_count", 0),
+                    qr.get("qr_printed_ts"),
+                    int(bool(qr.get("flagged", False))),
+                    qr.get("flag_reason"),
+                    qr.get("flag_mode"),
+                    qr.get("flag_device_id"),
+                    qr.get("flagged_ts"),
+                    int(bool(qr.get("active_status", True))),
+                    qr.get("discard_user"),
+                    qr.get("discard_device_id"),
+                    qr.get("discard_reason"),
+                    qr.get("discard_ts"),
+                    qr["created_ts"],
+                    qr["updated_ts"],
+                    qr["updated_by"],
+                    1,
+                    qr.get("qr_code_encoded")
+                )
+            )
+
+        # -------------------------------------------------
+        # Bulk insert QR master
+        # -------------------------------------------------
+
+        if values:
+
+            cursor.executemany(
+                """
+                INSERT INTO qr_master
+                (
+                    qr_code,
+                    cycle_count,
+                    qr_printed_ts,
+                    flagged,
+                    flag_reason,
+                    flag_mode,
+                    flag_device_id,
+                    flagged_ts,
+                    active_status,
+                    discard_user,
+                    discard_device_id,
+                    discard_reason,
+                    discard_ts,
+                    created_ts,
+                    updated_ts,
+                    updated_by,
+                    cloud_synced,
+                    qr_code_encoded
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                values
+            )
+
+        # -------------------------------------------------
+        # Commit complete refresh
+        # -------------------------------------------------
+
+        conn.commit()
+
+        return (
+            True,
+            (
+                "Local refresh completed successfully. "
+                f"qr_master loaded: {len(values)}, "
+                f"qr_master deleted: {master_deleted_count}, "
+                f"transactions wiped: {transaction_count}, "
+                f"invalid QR wiped: {invalid_count}."
+            )
+        )
+
+    except Exception as ex:
+
+        # -------------------------------------------------
+        # Rollback everything
+        # -------------------------------------------------
+
+        conn.rollback()
+
+        return (
+            False,
+            f"Local refresh failed: {ex}"
+        )
+    except Exception as ex:
+
+        conn.rollback()
+
+        return (
+            False,
+            str(ex)
+        )
+        
+        
+        
+# ---------------------------------------------------------
+# Get Pending Upload Counts
+# ---------------------------------------------------------
+
+def local_get_pending_upload_counts():
+    """
+    Return counts of local records waiting for cloud upload.
+
+    Returns
+    -------
+    success : bool
+    counts : dict | str
+
+        {
+            "qr_master": int,
+            "transactions": int,
+            "invalid": int,
+            "total": int,
+            "batch": int
+        }
+
+    batch = transactions + invalid
+
+    qr_master is intentionally excluded from batch count.
+    """
+
+    try:
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+        # -------------------------------------------------
+        # QR Master
+        # -------------------------------------------------
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM qr_master
+            WHERE cloud_synced = 0
+            """
+        )
+
+        qr_master_count = cursor.fetchone()[0]
+
+        # -------------------------------------------------
+        # Transactions
+        # -------------------------------------------------
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM qr_transaction
+            WHERE synced = 0
+            """
+        )
+
+        transaction_count = cursor.fetchone()[0]
+
+        # -------------------------------------------------
+        # Invalid QR
+        # -------------------------------------------------
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM qr_invalid
+            WHERE synced = 0
+            """
+        )
+
+        invalid_count = cursor.fetchone()[0]
+
+        # -------------------------------------------------
+        # Counts
+        # -------------------------------------------------
+
+        total_count = (
+            qr_master_count
+            + transaction_count
+            + invalid_count
+        )
+
+        batch_count = (
+            transaction_count
+            + invalid_count
+        )
+
+        return (
+            True,
+            {
+                "qr_master": qr_master_count,
+                "transactions": transaction_count,
+                "invalid": invalid_count,
+                "total": total_count,
+                "batch": batch_count
+            }
         )
 
     except Exception as ex:

@@ -1,18 +1,42 @@
-"""QR Scanner application entry point."""
+"""
+main.py
+
+Application entry point.
+
+Responsibilities:
+    1. Run startup validation.
+    2. Start the main application process.
+"""
 
 from services.startup_service import StartupService
+from services.main_process import MainProcess
 
 
-def main() -> None:
-    """Start the QR Scanner application."""
+def main():
+
+    print("\n========================================")
+    print("       QR SCANNER APPLICATION")
+    print("========================================")
+
+    # -----------------------------------------------------
+    # Application Startup
+    # -----------------------------------------------------
 
     startup = StartupService()
 
     if not startup.start():
-        print("\nApplication is NOT READY.")
+
+        print("\nAPPLICATION NOT STARTED.")
+
         return
 
-    print("\nApplication started successfully.")
+    # -----------------------------------------------------
+    # Start Main Application Process
+    # -----------------------------------------------------
+
+    process = MainProcess()
+
+    process.run()
 
 
 if __name__ == "__main__":
