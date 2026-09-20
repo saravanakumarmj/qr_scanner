@@ -35,6 +35,21 @@ from config import DEVICE_ID
 
 from cloud.configuration import cloud_get_configuration
 
+from services.populate_recent_cache import populate_recent_cache
+
+
+from services.app_settings import (
+    load_app_settings,
+    print_app_settings,
+    get_app_setting
+)
+
+from services.developer_configuration_service import (
+    load_developer_configuration,
+    print_developer_configuration
+)
+
+
 from services.configuration_service import (
     load_configuration,
     print_configuration
@@ -91,12 +106,25 @@ class StartupService:
         )
 
         results.append(
+            ("Local Settings", self._load_app_settings())
+        )
+
+        results.append(
             ("Configuration", self._load_configuration())
+        )
+
+        results.append(
+            ("Developer Config", self._load_developer_configuration())
         )
 
         results.append(
             ("Startup Sync", self._startup_sync())
         )
+        
+        results.append(
+            ("Recent Scan Cache", self._populate_recent_cache())
+        )
+
 
         results.append(
             ("QR Scanner", self._check_scanner())
@@ -245,6 +273,32 @@ class StartupService:
 
         return True
 
+
+    def _load_app_settings(self):
+
+        print("Loading local application settings...")
+
+        success, message = load_app_settings()
+
+        # Detailed warnings are already printed by
+        # load_app_settings().
+        #
+        # Local settings problems should NOT prevent
+        # the scanner from starting because defaults
+        # are available.
+
+        print_app_settings()
+
+        if not success:
+            print(
+                f"[STARTUP] WARNING: {message}"
+            )
+
+        else:
+            print("Local application settings loaded.")
+
+        return True
+
     def _load_configuration(self):
 
         print("Downloading application configuration...")
@@ -260,6 +314,47 @@ class StartupService:
         print_configuration()
 
         return True
+        
+        
+    def _load_developer_configuration(self):
+
+        print("Downloading developer configuration...")
+
+        developer_config_version = get_app_setting(
+            "developer_config_version"
+        )
+
+        if developer_config_version is None:
+
+            print(
+                "[STARTUP] Developer configuration version "
+                "not found in local settings."
+            )
+
+            return False
+
+        print(
+            f"Developer Config Version : "
+            f"{developer_config_version}"
+        )
+
+        success, message = load_developer_configuration(
+            developer_config_version
+        )
+
+        if not success:
+
+            print(
+                f"[STARTUP] Developer configuration "
+                f"load failed: {message}"
+            )
+
+            return False
+
+        print_developer_configuration()
+
+        return True
+        
 
     def _startup_sync(self):
 
@@ -318,6 +413,31 @@ class StartupService:
         )
 
         return True
+        
+            
+    def _populate_recent_cache(self):
+
+        if get_app_setting("populate_recent_cache") != "YES":
+            print(
+                "Recent scan cache population disabled."
+            )
+            return True
+
+        print("Populating recent scan cache...")
+
+        success, message = populate_recent_cache()
+
+        if not success:
+            print(
+                f"[STARTUP] Recent scan cache population failed: "
+                f"{message}"
+            )
+            return True
+
+        print(message)
+
+        return True
+    
         
         
         

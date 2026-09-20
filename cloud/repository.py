@@ -490,3 +490,84 @@ def cloud_get_all_qr_master():
             str(ex)
         )
 
+
+def cloud_get_recent_scan_records(device_id, cutoff_timestamp):
+    """
+    Downloads recent scan records for a device.
+
+    Returns
+    -------
+    success : bool
+    records : list
+        Each record contains only:
+        qr_code
+        scan_ts
+    message : str
+    """
+
+    try:
+        client = get_client()
+
+        # ---------------------------------------------
+        # Valid transactions
+        # ---------------------------------------------
+
+        transaction_response = (
+            client
+            .table("qr_transaction")
+            .select("qr_code, scan_ts")
+            .eq("device_id", device_id)
+            .gte("scan_ts", cutoff_timestamp)
+            .order("scan_ts", desc=False)
+            .execute()
+        )
+
+        records = []
+
+        for row in transaction_response.data:
+            records.append({
+                "qr_code": row["qr_code"],
+                "scan_ts": row["scan_ts"]
+            })
+
+        # ---------------------------------------------
+        # Invalid QR records
+        # ---------------------------------------------
+
+        invalid_response = (
+            client
+            .table("qr_invalid")
+            .select("raw_code, scan_ts")
+            .eq("device_id", device_id)
+            .gte("scan_ts", cutoff_timestamp)
+            .order("scan_ts", desc=False)
+            .execute()
+        )
+
+        for row in invalid_response.data:
+            records.append({
+                "qr_code": row["raw_code"],
+                "scan_ts": row["scan_ts"]
+            })
+
+        # ---------------------------------------------
+        # Sort combined records by timestamp
+        # ---------------------------------------------
+
+        records.sort(
+            key=lambda record: record["scan_ts"]
+        )
+
+        return (
+            True,
+            records,
+            "Recent scan records downloaded successfully."
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            [],
+            str(ex)
+        )

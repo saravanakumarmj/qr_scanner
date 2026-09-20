@@ -28,9 +28,6 @@ class Configuration:
 
     upload_batch_size = None
 
-    # Download Configuration
-    sync_interval = None
-
     # Device Configuration
     relay_on_time = None
 
@@ -75,7 +72,6 @@ def load_configuration():
     Configuration.upload_batch_size = config["upload_batch_size"]
 
 
-    Configuration.sync_interval = config["sync_interval"]
     Configuration.relay_on_time = config["relay_on_time"]
     Configuration.heartbeat_interval = config["heartbeat_interval"]
     Configuration.scanner_timeout = config["scanner_timeout"]
@@ -116,7 +112,6 @@ def print_configuration():
 
     print(f"Upload Batch Size      : {Configuration.upload_batch_size}")
 
-    print(f"Sync Interval (Sec)    : {Configuration.sync_interval}")
 
     print(f"Relay ON Time          : {Configuration.relay_on_time}")
 
