@@ -38,8 +38,9 @@ def local_lookup_qr(qr_code):
             SELECT *
             FROM qr_master
             WHERE qr_code = ?
+    	       AND active_status = ?
             """,
-            (qr_code,)
+            (qr_code, True)
         )
 
         row = cursor.fetchone()
@@ -830,4 +831,187 @@ def local_get_pending_upload_counts():
         return (
             False,
             str(ex)
+        )
+        
+# ---------------------------------------------------------
+# Incremental QR Master Refresh
+# ---------------------------------------------------------
+
+def local_incremental_refresh_qr_master(qr_records):
+    """
+    Insert or update qr_master records received from cloud.
+
+    This is used for incremental cloud -> local
+    synchronization.
+
+    No local records are deleted.
+
+    Parameters
+    ----------
+    qr_records : list[dict]
+        QR master records retrieved from Supabase.
+
+    Returns
+    -------
+    success : bool
+    message : str
+    """
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        # -------------------------------------------------
+        # Start transaction
+        # -------------------------------------------------
+
+        conn.execute("BEGIN")
+
+        inserted_count = 0
+        updated_count = 0
+
+        # -------------------------------------------------
+        # Process QR master records
+        # -------------------------------------------------
+
+        for qr in qr_records:
+
+            cursor.execute(
+                """
+                SELECT qr_code
+                FROM qr_master
+                WHERE qr_code = ?
+                """,
+                (qr["qr_code"],)
+            )
+
+            existing = cursor.fetchone()
+
+            if existing is None:
+
+                cursor.execute(
+                    """
+                    INSERT INTO qr_master
+                    (
+                        qr_code,
+                        cycle_count,
+                        qr_printed_ts,
+                        flagged,
+                        flag_reason,
+                        flag_mode,
+                        flag_device_id,
+                        flagged_ts,
+                        active_status,
+                        discard_user,
+                        discard_device_id,
+                        discard_reason,
+                        discard_ts,
+                        created_ts,
+                        updated_ts,
+                        updated_by,
+                        cloud_synced,
+                        qr_code_encoded
+                    )
+                    VALUES
+                    (
+                        ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+                    """,
+                    (
+                        qr["qr_code"],
+                        qr.get("cycle_count", 0),
+                        qr.get("qr_printed_ts"),
+                        int(bool(qr.get("flagged", False))),
+                        qr.get("flag_reason"),
+                        qr.get("flag_mode"),
+                        qr.get("flag_device_id"),
+                        qr.get("flagged_ts"),
+                        int(bool(qr.get("active_status", True))),
+                        qr.get("discard_user"),
+                        qr.get("discard_device_id"),
+                        qr.get("discard_reason"),
+                        qr.get("discard_ts"),
+                        qr["created_ts"],
+                        qr["updated_ts"],
+                        qr["updated_by"],
+                        1,
+                        qr.get("qr_code_encoded")
+                    )
+                )
+
+                inserted_count += 1
+
+            else:
+
+                cursor.execute(
+                    """
+                    UPDATE qr_master
+                    SET
+                        cycle_count = ?,
+                        qr_printed_ts = ?,
+                        flagged = ?,
+                        flag_reason = ?,
+                        flag_mode = ?,
+                        flag_device_id = ?,
+                        flagged_ts = ?,
+                        active_status = ?,
+                        discard_user = ?,
+                        discard_device_id = ?,
+                        discard_reason = ?,
+                        discard_ts = ?,
+                        created_ts = ?,
+                        updated_ts = ?,
+                        updated_by = ?,
+                        cloud_synced = 1,
+                        qr_code_encoded = ?
+                    WHERE qr_code = ?
+                    """,
+                    (
+                        qr.get("cycle_count", 0),
+                        qr.get("qr_printed_ts"),
+                        int(bool(qr.get("flagged", False))),
+                        qr.get("flag_reason"),
+                        qr.get("flag_mode"),
+                        qr.get("flag_device_id"),
+                        qr.get("flagged_ts"),
+                        int(bool(qr.get("active_status", True))),
+                        qr.get("discard_user"),
+                        qr.get("discard_device_id"),
+                        qr.get("discard_reason"),
+                        qr.get("discard_ts"),
+                        qr["created_ts"],
+                        qr["updated_ts"],
+                        qr["updated_by"],
+                        qr.get("qr_code_encoded"),
+                        qr["qr_code"]
+                    )
+                )
+
+                updated_count += 1
+
+        # -------------------------------------------------
+        # Commit
+        # -------------------------------------------------
+
+        conn.commit()
+
+        return (
+            True,
+            (
+                "Incremental qr_master refresh completed. "
+                f"Inserted: {inserted_count}, "
+                f"Updated: {updated_count}."
+            )
+        )
+
+    except Exception as ex:
+
+        conn.rollback()
+
+        return (
+            False,
+            f"Incremental qr_master refresh failed: {ex}"
         )

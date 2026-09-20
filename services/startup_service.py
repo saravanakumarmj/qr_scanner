@@ -34,7 +34,7 @@ from cloud.repository import get_device
 from config import DEVICE_ID
 
 from cloud.configuration import cloud_get_configuration
-
+from services.background_maintenance import BackgroundMaintenanceThread
 from services.populate_recent_cache import populate_recent_cache
 
 
@@ -53,6 +53,10 @@ from services.developer_configuration_service import (
 from services.configuration_service import (
     load_configuration,
     print_configuration
+)
+
+from services.cloud_to_local_periodic_sync_service import (
+    CloudToLocalPeriodicSyncService
 )
 
 
@@ -77,7 +81,16 @@ from cloud.health import check_supabase
 class StartupService:
 
     def __init__(self):
-        pass
+
+            self.cloud_to_local_sync = (
+                CloudToLocalPeriodicSyncService()
+            )
+
+            self.background_maintenance = (
+                BackgroundMaintenanceThread(
+                    self.cloud_to_local_sync
+                )
+            )
 
     def start(self):
 
@@ -129,6 +142,10 @@ class StartupService:
         results.append(
             ("QR Scanner", self._check_scanner())
         )
+
+        if all(status for _, status in results):
+
+            self.background_maintenance.start()
 
         failed = 0
 
@@ -412,7 +429,16 @@ class StartupService:
             f"Local refresh successful: {message}"
         )
 
-        return True
+        self.cloud_to_local_sync.set_last_sync_ts(
+            sync_timestamp
+        )
+
+        print(
+            f"Cloud -> Local sync watermark : "
+            f"{sync_timestamp}"
+        )
+
+        return True        
         
             
     def _populate_recent_cache(self):
@@ -470,3 +496,5 @@ class StartupService:
         # TODO
 
         return True
+
+        

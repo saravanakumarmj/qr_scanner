@@ -571,3 +571,54 @@ def cloud_get_recent_scan_records(device_id, cutoff_timestamp):
             [],
             str(ex)
         )
+        
+# ---------------------------------------------------------
+# Get Incremental QR Master Updates
+# ---------------------------------------------------------
+
+def cloud_get_qr_master_updates(last_sync_ts, device_id):
+    """
+    Fetch qr_master records changed in Supabase after the
+    last successful synchronization.
+
+    Only records changed by other devices are returned.
+
+    Parameters
+    ----------
+    last_sync_ts : str
+        Timestamp of the last successful cloud -> local sync.
+
+    device_id : str
+        Current Raspberry Pi device ID.
+
+    Returns
+    -------
+    success : bool
+    data : list[dict] | str
+    """
+
+    try:
+
+        supabase = cloud_connect()
+
+        response = (
+            supabase
+            .table("qr_master")
+            .select("*")
+            .gt("updated_ts", last_sync_ts)
+            .neq("updated_by", device_id)
+            .order("updated_ts")
+            .execute()
+        )
+
+        return (
+            True,
+            response.data
+        )
+
+    except Exception as ex:
+
+        return (
+            False,
+            str(ex)
+        )

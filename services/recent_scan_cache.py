@@ -12,7 +12,7 @@ Author  : Saravanakumar MJ
 Project : QR Scanner
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 
 class RecentScanCache:
@@ -63,14 +63,14 @@ class RecentScanCache:
 
         self._cache[qr_code] = scan_ts
 
-    # --------------------------------------------------------
-    # Cleanup
-    # --------------------------------------------------------
-
+        # --------------------------------------------------------
+        # Cleanup
+        # --------------------------------------------------------
+            
     def cleanup(self, cache_cleanup_interval_secs):
 
         cutoff_time = (
-            datetime.now(timezone.utc)
+            datetime.now().astimezone()
             - timedelta(
                 seconds=cache_cleanup_interval_secs
             )
@@ -89,13 +89,7 @@ class RecentScanCache:
             if scan_ts.tzinfo is None:
 
                 scan_ts = scan_ts.replace(
-                    tzinfo=timezone.utc
-                )
-
-            else:
-
-                scan_ts = scan_ts.astimezone(
-                    timezone.utc
+                    tzinfo=cutoff_time.tzinfo
                 )
 
             if scan_ts < cutoff_time:
@@ -106,8 +100,10 @@ class RecentScanCache:
 
             del self._cache[qr_code]
 
-        return len(expired)
-
+        return (
+            len(expired),
+            cutoff_time.isoformat(timespec="seconds")
+        )
     # --------------------------------------------------------
     # Clear
     # --------------------------------------------------------
