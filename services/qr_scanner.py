@@ -1,61 +1,37 @@
-"""
-qr_scanner.py
-
-USB HID QR scanner service.
-
-The scanner behaves like a keyboard and sends the
-scanned QR value followed by an Enter key.
-
-This module is responsible only for reading the scanner.
-It does not perform QR validation, database operations,
-decoding, uploading, or business-rule processing.
-"""
-
-from evdev import InputDevice
-from evdev import list_devices
-from evdev import ecodes
+from evdev import InputDevice, list_devices, ecodes
 
 
 class QRScanner:
+    """
+    Reads QR codes from the BF SCAN USB HID scanner.
+
+    The scanner behaves like a keyboard, but we read its events
+    directly through evdev so the scanned QR is not typed into
+    the currently focused terminal/application.
+    """
+
+    VENDOR_ID = 0x9901
+    PRODUCT_ID = 0x0301
+    DEVICE_NAME = "BF SCAN SCAN KEYBOARD"
 
     def __init__(self):
-        """
-        Find and open the QR scanner.
-        """
-
         self.device = self._find_scanner()
-
         self._buffer = ""
 
-    # ---------------------------------------------------------
-    # Find Scanner
-    # ---------------------------------------------------------
+        # Prevent scanner keystrokes from reaching the normal
+        # keyboard/terminal input system.
+        self.device.grab()
 
     def _find_scanner(self):
-        """
-        Automatically find the BF SCAN USB keyboard.
-
-        Returns
-        -------
-        InputDevice
-
-        Raises
-        ------
-        RuntimeError
-            If the scanner cannot be found.
-        """
-
-        devices = list_devices()
-
-        for device_path in devices:
-
+        for device_path in list_devices():
             try:
                 device = InputDevice(device_path)
 
-                name = device.name.upper()
-
-                if "BF SCAN" in name:
-
+                if (
+                    device.name == self.DEVICE_NAME
+                    and device.info.vendor == self.VENDOR_ID
+                    and device.info.product == self.PRODUCT_ID
+                ):
                     return device
 
                 device.close()
@@ -64,22 +40,16 @@ class QRScanner:
                 continue
 
         raise RuntimeError(
-            "QR scanner not found. "
-            "Check that the BF SCAN scanner is connected."
+            "BF SCAN QR scanner not found. "
+            "Check USB connection."
         )
-
-    # ---------------------------------------------------------
-    # Read Scan
-    # ---------------------------------------------------------
 
     def read_scan(self):
         """
-        Wait for one complete QR scan.
+        Wait for and return one complete QR scan.
 
-        Returns
-        -------
-        str
-            Raw QR value.
+        The scanner sends the QR data as keyboard events,
+        followed by Enter.
         """
 
         for event in self.device.read_loop():
@@ -87,6 +57,7 @@ class QRScanner:
             if event.type != ecodes.EV_KEY:
                 continue
 
+            # Only key-down events.
             if event.value != 1:
                 continue
 
@@ -95,14 +66,9 @@ class QRScanner:
             if not key_name:
                 continue
 
-            # ---------------------------------------------
-            # Enter = end of scan
-            # ---------------------------------------------
-
+            # End of scan
             if key_name in ("KEY_ENTER", "KEY_KPENTER"):
-
                 qr_value = self._buffer
-
                 self._buffer = ""
 
                 if qr_value:
@@ -110,34 +76,15 @@ class QRScanner:
 
                 continue
 
-            # ---------------------------------------------
-            # Normal keyboard character
-            # ---------------------------------------------
+            character = self._key_to_character(key_name)
 
-            if key_name.startswith("KEY_"):
-
-                character = self._key_to_character(
-                    key_name
-                )
-
-                if character:
-                    self._buffer += character
-
-    # ---------------------------------------------------------
-    # Convert Key
-    # ---------------------------------------------------------
+            if character:
+                self._buffer += character
 
     @staticmethod
     def _key_to_character(key_name):
-        """
-        Convert an evdev key name into a character.
-
-        Supports the characters normally used by our
-        QR codes.
-        """
-
         mapping = {
-
+            # Numbers
             "KEY_0": "0",
             "KEY_1": "1",
             "KEY_2": "2",
@@ -149,6 +96,7 @@ class QRScanner:
             "KEY_8": "8",
             "KEY_9": "9",
 
+            # Letters
             "KEY_A": "A",
             "KEY_B": "B",
             "KEY_C": "C",
@@ -176,60 +124,60 @@ class QRScanner:
             "KEY_Y": "Y",
             "KEY_Z": "Z",
 
+            # Common QR characters
             "KEY_MINUS": "-",
             "KEY_UNDERSCORE": "_",
-
+            "KEY_DOT": ".",
+            "KEY_SLASH": "/",
+            "KEY_BACKSLASH": "\\",
+            "KEY_EQUAL": "=",
+            "KEY_PLUS": "+",
+            "KEY_COLON": ":",
         }
 
         return mapping.get(key_name)
 
-    # ---------------------------------------------------------
-    # Close
-    # ---------------------------------------------------------
-
-    def close(self):
-        """
-        Close the scanner device.
-        """
-
-        if self.device:
-            self.device.close()
-
     @classmethod
     def check_health(cls):
         """
-        Check whether the BF SCAN USB scanner is available.
+        Check whether the BF SCAN QR scanner is currently connected.
 
-        This does not create the scanner reader.
+        Returns:
+            (True, message) if scanner is found.
+            (False, message) if scanner is not found.
         """
 
-        try:
-            device = cls().device
+        for device_path in list_devices():
+            try:
+                device = InputDevice(device_path)
 
-            device.close()
+                if (
+                    device.name == cls.DEVICE_NAME
+                    and device.info.vendor == cls.VENDOR_ID
+                    and device.info.product == cls.PRODUCT_ID
+                ):
+                    device.close()
+                    return True, "BF SCAN QR scanner detected."
 
-            return (
-                True,
-                "QR scanner is connected."
-            )
+                device.close()
 
-        except RuntimeError as ex:
+            except OSError:
+                continue
 
-            return (
-                False,
-                str(ex)
-            )
+        return False, "BF SCAN QR scanner not found."
 
-        except OSError as ex:
+    def close(self):
+        """Release exclusive scanner access and close device."""
 
-            return (
-                False,
-                f"QR scanner error: {ex}"
-            )
+        if self.device:
+            try:
+                self.device.ungrab()
+            except Exception:
+                pass
 
-        except Exception as ex:
+            try:
+                self.device.close()
+            except Exception:
+                pass
 
-            return (
-                False,
-                f"QR scanner health check failed: {ex}"
-            )
+            self.device = None

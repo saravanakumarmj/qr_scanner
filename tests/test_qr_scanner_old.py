@@ -1,8 +1,13 @@
+"""
+tests/test_qr_scanner.py
+
+Standalone test for the USB QR scanner.
+"""
+
 from services.qr_scanner import QRScanner
 
 
 def main():
-    scanner = None
 
     print()
     print("----------------------------------------")
@@ -10,33 +15,40 @@ def main():
     print("----------------------------------------")
 
     try:
+
         scanner = QRScanner()
 
         print("Scanner detected successfully.")
         print(f"Scanner : {scanner.device.name}")
-        print(f"Vendor  : {scanner.device.info.vendor:04X}")
-        print(f"Product : {scanner.device.info.product:04X}")
         print()
-        print("Scanner is now exclusively captured.")
         print("Scan a QR code...")
         print("Press Ctrl+C to stop.")
         print()
 
         while True:
+
             qr_value = scanner.read_scan()
-            print(f"QR Scanned : {qr_value}")
+
+            print(
+                f"QR Scanned : {qr_value}"
+            )
 
     except KeyboardInterrupt:
+
         print()
         print("Scanner test stopped.")
 
     except Exception as ex:
+
         print()
         print(f"Scanner Error : {ex}")
 
     finally:
-        if scanner:
+
+        try:
             scanner.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
